@@ -206,6 +206,6 @@ All memory allocations use Beacon's heap and are properly freed after parsing to
 - BOF only supports Windows 10/11 (versions 30 and 31)
 - Earlier Windows versions (XP, Vista, 7, 8.1) are not supported
 
-## Refrence
+## Reference
 Based on:
 https://github.com/Maldev-Academy/PrefetchFileParser
