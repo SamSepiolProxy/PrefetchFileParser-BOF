@@ -1,0 +1,49 @@
+alias portscanner {
+    local('$barch $handle $data $args $bof');
+    
+    # Get beacon architecture
+    $barch = barch($1);
+    
+    # Check arguments
+    if(size(@_) < 3) {
+        berror($1, "Usage: portscanner <ip> <ports>");
+        berror($1, "Example: portscanner 192.168.1.1 80,443,8080,3389");
+        return;
+    }
+    
+    # Pack arguments
+    $args = bof_pack($1, "zz", $2, $3);
+    
+    # Load the appropriate BOF based on architecture
+    if($barch eq "x64") {
+        $handle = openf(script_resource("portscanner.x64.o"));
+    }
+    else {
+        $handle = openf(script_resource("portscanner.x86.o"));
+    }
+    
+    $data = readb($handle, -1);
+    closef($handle);
+    
+    # Execute BOF
+    if(strlen($data) > 0) {
+        btask($1, "Running port scanner against " . $2 . " on ports: " . $3);
+        beacon_inline_execute($1, $data, "go", $args);
+    }
+    else {
+        berror($1, "Could not load portscanner BOF");
+    }
+}
+
+beacon_command_register(
+    "portscanner",
+    "Scan ports on a remote host",
+    "Usage: portscanner <ip> <ports>\n\n" .
+    "Scans specified ports on a target IP address.\n\n" .
+    "Arguments:\n" .
+    "  ip    - Target IP address\n" .
+    "  ports - Comma-separated list of ports (e.g., 80,443,8080)\n\n" .
+    "Examples:\n" .
+    "  portscanner 192.168.1.1 80,443,8080\n" .
+    "  portscanner 10.0.0.5 22,3389,445,139"
+);
