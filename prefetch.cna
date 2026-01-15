@@ -1,18 +1,18 @@
 alias prefetch {
-    local('$barch $handle $data $args $path @filters');
+    local('$barch $handle $data $args $path @filters $i');
     
     # Get beacon architecture
     $barch = barch($1);
     
-    # Default prefetch path
-    $path = "C:\\Windows\\Prefetch";
-    
-    # Parse arguments
+    # Default: no custom path, collect all args as filters
+    $path = "";
     @filters = @();
     
+    # Parse arguments
     if(size(@_) > 1) {
-        # Check if first arg is a custom path (contains backslash or colon)
+        # Check if first argument looks like a path (contains \ or :)
         if(indexOf($2, "\\") >= 0 || indexOf($2, ":") >= 0) {
+            # First arg is a path
             $path = $2;
             # Remaining args are filters
             for($i = 3; $i < size(@_); $i++) {
@@ -20,15 +20,24 @@ alias prefetch {
             }
         }
         else {
-            # All args are filters
+            # All args are filters (no custom path)
             for($i = 2; $i < size(@_); $i++) {
                 push(@filters, @_[$i]);
             }
         }
     }
     
-    # Pack arguments: path + variable number of filters
-    $args = bof_pack($1, "z*", $path, @filters);
+    # Build argument string
+    # First string is either empty (use default path) or custom path
+    # Followed by filter strings
+    if($path eq "") {
+        # Pass empty string for path (will use default C:\Windows\Prefetch)
+        $args = bof_pack($1, "z*", "", @filters);
+    }
+    else {
+        # Pass custom path
+        $args = bof_pack($1, "z*", $path, @filters);
+    }
     
     # Load the appropriate BOF based on architecture
     if($barch eq "x64") {
@@ -43,11 +52,17 @@ alias prefetch {
     
     # Execute BOF
     if(strlen($data) > 0) {
-        if(size(@filters) > 0) {
-            btask($1, "Parsing prefetch files from " . $path . " (filtered: " . join(", ", @filters) . ")");
+        if($path ne "" && size(@filters) > 0) {
+            btask($1, "Parsing prefetch files from " . $path . " (filters: " . join(", ", @filters) . ")");
+        }
+        else if($path ne "") {
+            btask($1, "Parsing prefetch files from " . $path);
+        }
+        else if(size(@filters) > 0) {
+            btask($1, "Parsing prefetch files (filters: " . join(", ", @filters) . ")");
         }
         else {
-            btask($1, "Parsing prefetch files from " . $path);
+            btask($1, "Parsing all prefetch files");
         }
         beacon_inline_execute($1, $data, "go", $args);
     }
@@ -63,14 +78,15 @@ beacon_command_register(
     "Parses Windows Prefetch files and displays execution artifacts.\n\n" .
     "Arguments:\n" .
     "  path     - (Optional) Custom prefetch directory path\n" .
+    "             Must contain \\ or : to be recognized as a path\n" .
     "             Default: C:\\Windows\\Prefetch\n" .
     "  filters  - (Optional) Filter by executable names (e.g., cmd.exe, powershell.exe)\n" .
     "             Matches against the executable name, not the prefetch filename\n\n" .
     "Examples:\n" .
     "  prefetch\n" .
-    "  prefetch C:\\PrefetchBackup\n" .
     "  prefetch cmd.exe powershell.exe\n" .
-    "  prefetch notepad.exe calc.exe chrome.exe\n" .
+    "  prefetch C:\\PrefetchBackup\n" .
     "  prefetch C:\\Custom\\Path notepad.exe calc.exe\n\n" .
     "Note: Requires administrator privileges to access C:\\Windows\\Prefetch"
 );
+

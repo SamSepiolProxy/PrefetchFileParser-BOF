@@ -482,8 +482,7 @@ static VOID OutputPrefetchList(PPREFETCH_LIST pList) {
     
     if (!pList) return;
     
-    BeaconPrintf(CALLBACK_OUTPUT, "\n========== Prefetch Analysis ==========\n");
-    BeaconPrintf(CALLBACK_OUTPUT, "Total Entries: %lu\n\n", pList->dwCount);
+    BeaconPrintf(CALLBACK_OUTPUT, "\n[*] Total Entries: %lu\n\n", pList->dwCount);
     
     for (DWORD i = 0; i < pList->dwCount; i++) {
         PPREFETCH_ENTRY pEntry = &pList->pEntries[i];
@@ -520,19 +519,42 @@ void go(char *args, int len) {
     PREFETCH_LIST PrefetchList = {0};
     int filterLen = 0;
     
+    // Reset global filter count
+    g_dwBinaryFilterCount = 0;
+    
     BeaconDataParse(&parser, args, len);
     szPrefetchPath = BeaconDataExtract(&parser, NULL);
     
-    // Convert prefetch path if provided
+    // Check if first argument is a path (contains \ or :) or a filter
     if (szPrefetchPath && szPrefetchPath[0] != '\0') {
-        // Convert ASCII to wide char
-        for (int i = 0; i < 259 && szPrefetchPath[i]; i++) {
-            wszPrefetchPath[i] = (WCHAR)szPrefetchPath[i];
+        // Check if it looks like a path
+        BOOL hasBackslash = FALSE;
+        BOOL hasColon = FALSE;
+        
+        for (int i = 0; szPrefetchPath[i] != '\0'; i++) {
+            if (szPrefetchPath[i] == '\\') hasBackslash = TRUE;
+            if (szPrefetchPath[i] == ':') hasColon = TRUE;
         }
-        wszPrefetchPath[259] = L'\0';
+        
+        if (hasBackslash || hasColon) {
+            // It's a path - convert it
+            for (int i = 0; i < 259 && szPrefetchPath[i]; i++) {
+                wszPrefetchPath[i] = (WCHAR)szPrefetchPath[i];
+            }
+            wszPrefetchPath[259] = L'\0';
+        } else {
+            // It's a filter - add it to filter list
+            if (g_dwBinaryFilterCount < MAX_BINARY_FILTERS) {
+                for (int i = 0; i < 259 && szPrefetchPath[i]; i++) {
+                    g_szBinaryFilters[g_dwBinaryFilterCount][i] = (WCHAR)szPrefetchPath[i];
+                }
+                g_szBinaryFilters[g_dwBinaryFilterCount][259] = L'\0';
+                g_dwBinaryFilterCount++;
+            }
+        }
     }
     
-    // Parse optional filters
+    // Parse remaining arguments as filters
     while (BeaconDataLength(&parser) > 0) {
         szFilter = BeaconDataExtract(&parser, &filterLen);
         if (szFilter && g_dwBinaryFilterCount < MAX_BINARY_FILTERS) {
@@ -549,6 +571,9 @@ void go(char *args, int len) {
     
     if (g_dwBinaryFilterCount > 0) {
         BeaconPrintf(CALLBACK_OUTPUT, "[*] Filters: %lu\n", g_dwBinaryFilterCount);
+        for (DWORD i = 0; i < g_dwBinaryFilterCount; i++) {
+            BeaconPrintf(CALLBACK_OUTPUT, "    - %ls\n", g_szBinaryFilters[i]);
+        }
     }
     
     if (!EnumeratePrefetch(&PrefetchList, wszPrefetchPath)) {
@@ -563,8 +588,6 @@ void go(char *args, int len) {
     }
     
     OutputPrefetchList(&PrefetchList);
-    
-    BeaconPrintf(CALLBACK_OUTPUT, "[+] Parsed %lu entries\n", PrefetchList.dwCount);
     
     PrefetchListFree(&PrefetchList);
 }
