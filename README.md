@@ -19,13 +19,13 @@ Windows Prefetch (.pf files) stores information about frequently executed applic
 
 ## Features
 
-- ✅ Parses both compressed (Windows 10+) and uncompressed prefetch files
-- ✅ Supports Windows 10 (version 30) and Windows 11 (version 31) formats
-- ✅ Extracts execution timestamps, run counts, and file metadata
-- ✅ Optional filtering by filename
-- ✅ Custom prefetch directory path support
-- ✅ In-memory execution via BOF
-- ✅ Supports both x64 and x86 architectures
+- Parses both compressed (Windows 10+) and uncompressed prefetch files
+- Supports Windows 10 (version 30) and Windows 11 (version 31) formats
+- Extracts execution timestamps, run counts, and file metadata
+- Optional filtering by filename
+- Custom prefetch directory path support
+- In-memory execution via BOF
+- Supports both x64 and x86 architectures
 
 ## Compilation
 
@@ -148,17 +148,6 @@ Total Entries: 245
 [2] POWERSHELL.EXE
   ...
 ```
-
-## Differences from Original Tool
-
-The BOF version differs from the standalone executable in several ways:
-
-1. **Output format**: Outputs to Beacon console instead of JSON file
-2. **No main() function**: Uses `go()` as the entry point
-3. **Dynamic function resolution**: Uses DECLSPEC_IMPORT for all Windows APIs
-4. **Simplified parsing**: Extracts key forensic data without full file path resolution
-5. **In-memory execution**: Runs entirely in Beacon's process space
-
 ## Requirements
 
 - **Administrator privileges**: Required to access `C:\Windows\Prefetch`
@@ -216,3 +205,7 @@ All memory allocations use Beacon's heap and are properly freed after parsing to
 **"Unsupported prefetch version"**
 - BOF only supports Windows 10/11 (versions 30 and 31)
 - Earlier Windows versions (XP, Vista, 7, 8.1) are not supported
+
+## Refrence
+Based on:
+https://github.com/Maldev-Academy/PrefetchFileParser
