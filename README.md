@@ -161,13 +161,6 @@ Total Entries: 245
 - Maximum 64 filename filters
 - Sequential processing (not parallelized)
 
-## Use Cases
-
-- **Incident Response**: Identify executed malware and suspicious programs
-- **Forensic Analysis**: Determine program execution history and timeline
-- **Threat Hunting**: Find evidence of lateral movement tools (PSExec, WMI, etc.)
-- **Persistence Detection**: Identify startup programs and scheduled tasks
-
 ## Security Note
 
 This tool is intended for authorized security testing, incident response, and forensic analysis only. Unauthorized use may be illegal in your jurisdiction.
