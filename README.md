@@ -14,7 +14,7 @@ Windows Prefetch (.pf files) stores information about frequently executed applic
 
 - `prefetch_bof.c` - Main BOF source code
 - `prefetch.cna` - Aggressor script to load and execute the BOF
-- `Makefile_prefetch` - Build script for compiling
+- `Makefile` - Build script for compiling
 - `beacon.h` - Beacon API header file (from Cobalt Strike)
 
 ## Features
@@ -46,25 +46,19 @@ brew install mingw-w64
 To compile both x64 and x86 versions:
 
 ```bash
-make -f Makefile_prefetch all
+make -f Makefileall
 ```
 
 To compile only x64:
 
 ```bash
-make -f Makefile_prefetch x64
+make -f Makefilex64
 ```
 
 To compile only x86:
 
 ```bash
-make -f Makefile_prefetch x86
-```
-
-To clean build artifacts:
-
-```bash
-make -f Makefile_prefetch clean
+make -f Makefilex86
 ```
 
 After compilation, you should have:
