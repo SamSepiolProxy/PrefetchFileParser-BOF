@@ -1,0 +1,75 @@
+alias prefetch {
+    local('$barch $handle $data $args $path @filters');
+    
+    # Get beacon architecture
+    $barch = barch($1);
+    
+    # Default prefetch path
+    $path = "C:\\Windows\\Prefetch";
+    
+    # Parse arguments
+    @filters = @();
+    
+    if(size(@_) > 1) {
+        # Check if first arg is a custom path (contains backslash or colon)
+        if(indexOf($2, "\\") >= 0 || indexOf($2, ":") >= 0) {
+            $path = $2;
+            # Remaining args are filters
+            for($i = 3; $i < size(@_); $i++) {
+                push(@filters, @_[$i]);
+            }
+        }
+        else {
+            # All args are filters
+            for($i = 2; $i < size(@_); $i++) {
+                push(@filters, @_[$i]);
+            }
+        }
+    }
+    
+    # Pack arguments: path + variable number of filters
+    $args = bof_pack($1, "z*", $path, @filters);
+    
+    # Load the appropriate BOF based on architecture
+    if($barch eq "x64") {
+        $handle = openf(script_resource("prefetch.x64.o"));
+    }
+    else {
+        $handle = openf(script_resource("prefetch.x86.o"));
+    }
+    
+    $data = readb($handle, -1);
+    closef($handle);
+    
+    # Execute BOF
+    if(strlen($data) > 0) {
+        if(size(@filters) > 0) {
+            btask($1, "Parsing prefetch files from " . $path . " (filtered: " . join(", ", @filters) . ")");
+        }
+        else {
+            btask($1, "Parsing prefetch files from " . $path);
+        }
+        beacon_inline_execute($1, $data, "go", $args);
+    }
+    else {
+        berror($1, "Could not load prefetch BOF");
+    }
+}
+
+beacon_command_register(
+    "prefetch",
+    "Parse Windows Prefetch files",
+    "Usage: prefetch [path] [filter1 filter2 ...]\n\n" .
+    "Parses Windows Prefetch files and displays execution artifacts.\n\n" .
+    "Arguments:\n" .
+    "  path     - (Optional) Custom prefetch directory path\n" .
+    "             Default: C:\\Windows\\Prefetch\n" .
+    "  filters  - (Optional) Filter by prefetch filenames\n" .
+    "             Example: cmd.exe.pf powershell.exe.pf\n\n" .
+    "Examples:\n" .
+    "  prefetch\n" .
+    "  prefetch C:\\PrefetchBackup\n" .
+    "  prefetch cmd.exe.pf powershell.exe.pf\n" .
+    "  prefetch C:\\Custom\\Path notepad.exe.pf calc.exe.pf\n\n" .
+    "Note: Requires administrator privileges to access C:\\Windows\\Prefetch"
+);
