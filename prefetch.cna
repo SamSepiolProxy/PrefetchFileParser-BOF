@@ -64,12 +64,13 @@ beacon_command_register(
     "Arguments:\n" .
     "  path     - (Optional) Custom prefetch directory path\n" .
     "             Default: C:\\Windows\\Prefetch\n" .
-    "  filters  - (Optional) Filter by prefetch filenames\n" .
-    "             Example: cmd.exe.pf powershell.exe.pf\n\n" .
+    "  filters  - (Optional) Filter by executable names (e.g., cmd.exe, powershell.exe)\n" .
+    "             Matches against the executable name, not the prefetch filename\n\n" .
     "Examples:\n" .
     "  prefetch\n" .
     "  prefetch C:\\PrefetchBackup\n" .
-    "  prefetch cmd.exe.pf powershell.exe.pf\n" .
-    "  prefetch C:\\Custom\\Path notepad.exe.pf calc.exe.pf\n\n" .
+    "  prefetch cmd.exe powershell.exe\n" .
+    "  prefetch notepad.exe calc.exe chrome.exe\n" .
+    "  prefetch C:\\Custom\\Path notepad.exe calc.exe\n\n" .
     "Note: Requires administrator privileges to access C:\\Windows\\Prefetch"
 );

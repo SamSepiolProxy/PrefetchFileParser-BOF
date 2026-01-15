@@ -1,7 +1,7 @@
 #include <windows.h>
 #include "beacon.h"
 
-// Import necessary functions
+// Kernel32 imports
 DECLSPEC_IMPORT HANDLE WINAPI KERNEL32$GetProcessHeap(void);
 DECLSPEC_IMPORT LPVOID WINAPI KERNEL32$HeapAlloc(HANDLE, DWORD, SIZE_T);
 DECLSPEC_IMPORT LPVOID WINAPI KERNEL32$HeapReAlloc(HANDLE, DWORD, LPVOID, SIZE_T);
@@ -17,11 +17,13 @@ DECLSPEC_IMPORT BOOL WINAPI KERNEL32$FindClose(HANDLE);
 DECLSPEC_IMPORT BOOL WINAPI KERNEL32$FileTimeToLocalFileTime(const FILETIME*, LPFILETIME);
 DECLSPEC_IMPORT BOOL WINAPI KERNEL32$FileTimeToSystemTime(const FILETIME*, LPSYSTEMTIME);
 DECLSPEC_IMPORT DWORD WINAPI KERNEL32$GetVolumeInformationW(LPCWSTR, LPWSTR, DWORD, LPDWORD, LPDWORD, LPDWORD, LPWSTR, DWORD);
+DECLSPEC_IMPORT void WINAPI KERNEL32$RtlMoveMemory(PVOID, const VOID*, SIZE_T);
 
-DECLSPEC_IMPORT void WINAPI NTDLL$RtlSecureZeroMemory(PVOID, SIZE_T);
+// NTDLL imports
 DECLSPEC_IMPORT NTSTATUS NTAPI NTDLL$RtlDecompressBufferEx(USHORT, PUCHAR, ULONG, PUCHAR, ULONG, PULONG, PVOID);
 DECLSPEC_IMPORT NTSTATUS NTAPI NTDLL$RtlGetCompressionWorkSpaceSize(USHORT, PULONG, PULONG);
 
+// MSVCRT imports
 DECLSPEC_IMPORT int __cdecl MSVCRT$wcslen(const wchar_t*);
 DECLSPEC_IMPORT int __cdecl MSVCRT$_wcsicmp(const wchar_t*, const wchar_t*);
 DECLSPEC_IMPORT wchar_t* __cdecl MSVCRT$wcsrchr(const wchar_t*, wchar_t);
@@ -30,7 +32,9 @@ DECLSPEC_IMPORT wchar_t* __cdecl MSVCRT$wcscpy(wchar_t*, const wchar_t*);
 DECLSPEC_IMPORT wchar_t* __cdecl MSVCRT$wcsncpy(wchar_t*, const wchar_t*, size_t);
 DECLSPEC_IMPORT int __cdecl MSVCRT$_snwprintf(wchar_t*, size_t, const wchar_t*, ...);
 DECLSPEC_IMPORT void* __cdecl MSVCRT$memcpy(void*, const void*, size_t);
+DECLSPEC_IMPORT void* __cdecl MSVCRT$memset(void*, int, size_t);
 
+// SHLWAPI imports
 DECLSPEC_IMPORT LPWSTR WINAPI SHLWAPI$PathFindFileNameW(LPCWSTR);
 DECLSPEC_IMPORT LPWSTR WINAPI SHLWAPI$StrChrW(LPCWSTR, WCHAR);
 DECLSPEC_IMPORT int WINAPI SHLWAPI$StrCmpIW(LPCWSTR, LPCWSTR);
@@ -129,14 +133,12 @@ DWORD g_dwBinaryFilterCount = 0;
 static BOOL PrefetchListInit(PPREFETCH_LIST pList, DWORD dwInitialCapacity) {
     if (!pList || dwInitialCapacity == 0) return FALSE;
     
-    NTDLL$RtlSecureZeroMemory(pList, sizeof(PREFETCH_LIST));
+    MSVCRT$memset(pList, 0, sizeof(PREFETCH_LIST));
     
     pList->pEntries = (PPREFETCH_ENTRY)KERNEL32$HeapAlloc(KERNEL32$GetProcessHeap(), HEAP_ZERO_MEMORY, 
                                                            dwInitialCapacity * sizeof(PREFETCH_ENTRY));
-    if (!pList->pEntries) {
-        BeaconPrintf(CALLBACK_ERROR, "HeapAlloc failed\n");
+    if (!pList->pEntries)
         return FALSE;
-    }
     
     pList->dwCapacity = dwInitialCapacity;
     return TRUE;
@@ -168,7 +170,7 @@ static VOID PrefetchListFree(PPREFETCH_LIST pList) {
         KERNEL32$HeapFree(KERNEL32$GetProcessHeap(), 0, pList->pEntries);
     }
     
-    NTDLL$RtlSecureZeroMemory(pList, sizeof(PREFETCH_LIST));
+    MSVCRT$memset(pList, 0, sizeof(PREFETCH_LIST));
 }
 
 static BOOL PrefetchListExpand(PPREFETCH_LIST pList) {
@@ -179,10 +181,8 @@ static BOOL PrefetchListExpand(PPREFETCH_LIST pList) {
                                                                        HEAP_ZERO_MEMORY, 
                                                                        pList->pEntries, 
                                                                        dwNewCapacity * sizeof(PREFETCH_ENTRY));
-    if (!pNewEntry) {
-        BeaconPrintf(CALLBACK_ERROR, "HeapReAlloc failed\n");
+    if (!pNewEntry)
         return FALSE;
-    }
     
     pList->pEntries = pNewEntry;
     pList->dwCapacity = dwNewCapacity;
@@ -215,27 +215,20 @@ static PBYTE DecompressPrefetch(PBYTE pbCompressed, DWORD dwCompressedSize, PDWO
     *pdwDecompressedSize = 0;
     pMamHeader = (PPREFETCH_MAM_HEADER)pbCompressed;
     
-    if (pMamHeader->dwSignature != PREFETCH_COMPRESSED_SIGNATURE) {
-        BeaconPrintf(CALLBACK_ERROR, "Invalid MAM signature: 0x%08X\n", pMamHeader->dwSignature);
+    if (pMamHeader->dwSignature != PREFETCH_COMPRESSED_SIGNATURE)
         return NULL;
-    }
     
     ntStatus = NTDLL$RtlGetCompressionWorkSpaceSize(COMPRESSION_FORMAT_XPRESS_HUFF | COMPRESSION_ENGINE_MAXIMUM, 
                                                      &ulWorkSpaceSize, &ulTemp);
-    if (!NT_SUCCESS(ntStatus)) {
-        BeaconPrintf(CALLBACK_ERROR, "RtlGetCompressionWorkSpaceSize failed: 0x%08X\n", ntStatus);
+    if (!NT_SUCCESS(ntStatus))
         return NULL;
-    }
     
     pbWorkSpace = (PBYTE)KERNEL32$HeapAlloc(KERNEL32$GetProcessHeap(), 0, ulWorkSpaceSize);
-    if (!pbWorkSpace) {
-        BeaconPrintf(CALLBACK_ERROR, "WorkSpace HeapAlloc failed\n");
+    if (!pbWorkSpace)
         return NULL;
-    }
     
     pbDecompressed = (PBYTE)KERNEL32$HeapAlloc(KERNEL32$GetProcessHeap(), 0, pMamHeader->dwUncompressedSize);
     if (!pbDecompressed) {
-        BeaconPrintf(CALLBACK_ERROR, "Decompression buffer HeapAlloc failed\n");
         KERNEL32$HeapFree(KERNEL32$GetProcessHeap(), 0, pbWorkSpace);
         return NULL;
     }
@@ -251,7 +244,6 @@ static PBYTE DecompressPrefetch(PBYTE pbCompressed, DWORD dwCompressedSize, PDWO
     KERNEL32$HeapFree(KERNEL32$GetProcessHeap(), 0, pbWorkSpace);
     
     if (!NT_SUCCESS(ntStatus)) {
-        BeaconPrintf(CALLBACK_ERROR, "RtlDecompressBufferEx failed: 0x%08X\n", ntStatus);
         KERNEL32$HeapFree(KERNEL32$GetProcessHeap(), 0, pbDecompressed);
         return NULL;
     }
@@ -264,22 +256,17 @@ static PBYTE DecompressPrefetch(PBYTE pbCompressed, DWORD dwCompressedSize, PDWO
 static BOOL ParsePrefetchData(PBYTE pbData, DWORD dwDataSize, PPREFETCH_ENTRY pEntry) {
     PPREFETCH_HEADER pHeader = NULL;
     PPREFETCH_FILE_INFO pInfo = NULL;
-    DWORD dwRunCount = 0;
     
     if (!pbData || !pEntry || dwDataSize < sizeof(PREFETCH_HEADER))
         return FALSE;
     
     pHeader = (PPREFETCH_HEADER)pbData;
     
-    if (pHeader->dwSignature != PREFETCH_SIGNATURE) {
-        BeaconPrintf(CALLBACK_ERROR, "Invalid prefetch signature\n");
+    if (pHeader->dwSignature != PREFETCH_SIGNATURE)
         return FALSE;
-    }
     
-    if (pHeader->dwVersion != PREFETCH_VERSION_WIN10 && pHeader->dwVersion != PREFETCH_VERSION_WIN11) {
-        BeaconPrintf(CALLBACK_ERROR, "Unsupported prefetch version: %lu\n", pHeader->dwVersion);
+    if (pHeader->dwVersion != PREFETCH_VERSION_WIN10 && pHeader->dwVersion != PREFETCH_VERSION_WIN11)
         return FALSE;
-    }
     
     // Copy basic info
     MSVCRT$wcsncpy(pEntry->wszExecutableName, pHeader->wszExecutableName, 63);
@@ -313,13 +300,35 @@ static BOOL ParsePrefetchData(PBYTE pbData, DWORD dwDataSize, PPREFETCH_ENTRY pE
     return TRUE;
 }
 
-static BOOL ShouldProcessFile(LPCWSTR pszFileName) {
+static BOOL ShouldProcessFile(LPCWSTR pszFileName, LPCWSTR pszExecutableName) {
     if (g_dwBinaryFilterCount == 0)
         return TRUE;
     
-    for (DWORD i = 0; i < g_dwBinaryFilterCount; i++) {
-        if (SHLWAPI$StrCmpIW(pszFileName, g_szBinaryFilters[i]) == 0)
-            return TRUE;
+    // Match against the executable name if we have it
+    if (pszExecutableName && pszExecutableName[0] != L'\0') {
+        for (DWORD i = 0; i < g_dwBinaryFilterCount; i++) {
+            if (SHLWAPI$StrCmpIW(pszExecutableName, g_szBinaryFilters[i]) == 0)
+                return TRUE;
+        }
+    }
+    
+    // Fallback: try to extract executable name from prefetch filename
+    // Format is typically: EXECUTABLE.EXE-HASH.pf
+    WCHAR szExeName[260] = {0};
+    WCHAR* pDash = SHLWAPI$StrChrW(pszFileName, L'-');
+    
+    if (pDash) {
+        // Copy everything before the dash
+        int len = (int)(pDash - pszFileName);
+        if (len > 0 && len < 260) {
+            MSVCRT$wcsncpy(szExeName, pszFileName, len);
+            szExeName[len] = L'\0';
+            
+            for (DWORD i = 0; i < g_dwBinaryFilterCount; i++) {
+                if (SHLWAPI$StrCmpIW(szExeName, g_szBinaryFilters[i]) == 0)
+                    return TRUE;
+            }
+        }
     }
     
     return FALSE;
@@ -339,7 +348,6 @@ static BOOL ParsePrefetchFile(LPCWSTR pszFilePath, PPREFETCH_ENTRY pEntry) {
     
     hFile = KERNEL32$CreateFileW(pszFilePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
     if (hFile == INVALID_HANDLE_VALUE) {
-        BeaconPrintf(CALLBACK_ERROR, "Failed to open: %ls\n", pszFilePath);
         return FALSE;
     }
     
@@ -350,12 +358,10 @@ static BOOL ParsePrefetchFile(LPCWSTR pszFilePath, PPREFETCH_ENTRY pEntry) {
     
     pbFileData = (PBYTE)KERNEL32$HeapAlloc(KERNEL32$GetProcessHeap(), 0, dwFileSize);
     if (!pbFileData) {
-        BeaconPrintf(CALLBACK_ERROR, "HeapAlloc failed for file data\n");
         goto _END_OF_FUNC;
     }
     
     if (!KERNEL32$ReadFile(hFile, pbFileData, dwFileSize, &dwBytesRead, NULL) || dwBytesRead != dwFileSize) {
-        BeaconPrintf(CALLBACK_ERROR, "ReadFile failed\n");
         goto _END_OF_FUNC;
     }
     
@@ -415,15 +421,11 @@ static BOOL EnumeratePrefetch(PPREFETCH_LIST pList, LPCWSTR pszPrefetchPath) {
     
     hFind = KERNEL32$FindFirstFileW(szSearchPath, &FindData);
     if (hFind == INVALID_HANDLE_VALUE) {
-        BeaconPrintf(CALLBACK_ERROR, "FindFirstFileW failed\n");
         goto _END_OF_FUNC;
     }
     
     do {
         if (FindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-            continue;
-        
-        if (!ShouldProcessFile(FindData.cFileName))
             continue;
         
         MSVCRT$_snwprintf(szFilePath, 259, L"%s\\%s", pszPrefetchPath, FindData.cFileName);
@@ -434,7 +436,15 @@ static BOOL EnumeratePrefetch(PPREFETCH_LIST pList, LPCWSTR pszPrefetchPath) {
         
         if (!ParsePrefetchFile(szFilePath, pEntry)) {
             pList->dwCount--;
-            NTDLL$RtlSecureZeroMemory(pEntry, sizeof(PREFETCH_ENTRY));
+            MSVCRT$memset(pEntry, 0, sizeof(PREFETCH_ENTRY));
+            continue;
+        }
+        
+        // Check filter after parsing so we have the executable name
+        if (!ShouldProcessFile(FindData.cFileName, pEntry->wszExecutableName)) {
+            pList->dwCount--;
+            MSVCRT$memset(pEntry, 0, sizeof(PREFETCH_ENTRY));
+            continue;
         }
         
     } while (KERNEL32$FindNextFileW(hFind, &FindData));
@@ -535,26 +545,26 @@ void go(char *args, int len) {
         }
     }
     
-    BeaconPrintf(CALLBACK_OUTPUT, "[*] Enumerating prefetch files from: %ls\n", wszPrefetchPath);
+    BeaconPrintf(CALLBACK_OUTPUT, "[*] Parsing prefetch from: %ls\n", wszPrefetchPath);
     
     if (g_dwBinaryFilterCount > 0) {
-        BeaconPrintf(CALLBACK_OUTPUT, "[*] Filters applied: %lu\n", g_dwBinaryFilterCount);
+        BeaconPrintf(CALLBACK_OUTPUT, "[*] Filters: %lu\n", g_dwBinaryFilterCount);
     }
     
     if (!EnumeratePrefetch(&PrefetchList, wszPrefetchPath)) {
-        BeaconPrintf(CALLBACK_ERROR, "Failed to enumerate prefetch files\n");
+        PrefetchListFree(&PrefetchList);
         return;
     }
     
     if (PrefetchList.dwCount == 0) {
-        BeaconPrintf(CALLBACK_OUTPUT, "[!] No prefetch entries found\n");
+        BeaconPrintf(CALLBACK_OUTPUT, "[!] No entries found\n");
         PrefetchListFree(&PrefetchList);
         return;
     }
     
     OutputPrefetchList(&PrefetchList);
     
-    BeaconPrintf(CALLBACK_OUTPUT, "[+] Successfully parsed %lu prefetch entries\n", PrefetchList.dwCount);
+    BeaconPrintf(CALLBACK_OUTPUT, "[+] Parsed %lu entries\n", PrefetchList.dwCount);
     
     PrefetchListFree(&PrefetchList);
 }

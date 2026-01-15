@@ -1,13 +1,31 @@
-# Port Scanner BOF
+# Windows Prefetch Parser BOF
 
-A Beacon Object File (BOF) version of the port scanner for Cobalt Strike.
+A Beacon Object File (BOF) that parses Windows Prefetch files to extract execution artifacts. This tool helps identify program execution history on Windows systems.
+
+## What is Prefetch?
+
+Windows Prefetch (.pf files) stores information about frequently executed applications to speed up their loading. These files contain valuable forensic artifacts including:
+- Executable name and path
+- Number of times executed (run count)
+- Last 8 execution timestamps
+- Files and directories accessed by the program
 
 ## Files
 
-- `portscanner_bof.c` - Main BOF source code
-- `beacon.h` - Beacon API header file
-- `portscanner.cna` - Aggressor script to load and execute the BOF
-- `Makefile` - Build script for compiling
+- `prefetch_bof.c` - Main BOF source code
+- `prefetch.cna` - Aggressor script to load and execute the BOF
+- `Makefile_prefetch` - Build script for compiling
+- `beacon.h` - Beacon API header file (from Cobalt Strike)
+
+## Features
+
+- ✅ Parses both compressed (Windows 10+) and uncompressed prefetch files
+- ✅ Supports Windows 10 (version 30) and Windows 11 (version 31) formats
+- ✅ Extracts execution timestamps, run counts, and file metadata
+- ✅ Optional filtering by filename
+- ✅ Custom prefetch directory path support
+- ✅ In-memory execution via BOF
+- ✅ Supports both x64 and x86 architectures
 
 ## Compilation
 
@@ -28,105 +46,179 @@ brew install mingw-w64
 To compile both x64 and x86 versions:
 
 ```bash
-make all
+make -f Makefile_prefetch all
 ```
 
 To compile only x64:
 
 ```bash
-make x64
+make -f Makefile_prefetch x64
 ```
 
 To compile only x86:
 
 ```bash
-make x86
+make -f Makefile_prefetch x86
 ```
 
 To clean build artifacts:
 
 ```bash
-make clean
+make -f Makefile_prefetch clean
 ```
 
 After compilation, you should have:
-- `portscanner.x64.o` - 64-bit BOF
-- `portscanner.x86.o` - 32-bit BOF
+- `prefetch.x64.o` - 64-bit BOF
+- `prefetch.x86.o` - 32-bit BOF
 
 ## Installation in Cobalt Strike
 
-1. Create a directory for the BOF (e.g., `bofs/portscanner/`)
+1. Create a directory for the BOF (e.g., `bofs/prefetch/`)
 2. Copy the compiled `.o` files and the `.cna` script to this directory:
    ```
-   bofs/portscanner/
-   ├── portscanner.cna
-   ├── portscanner.x64.o
-   └── portscanner.x86.o
+   bofs/prefetch/
+   ├── prefetch.cna
+   ├── prefetch.x64.o
+   └── prefetch.x86.o
    ```
 3. Load the Aggressor script in Cobalt Strike:
    - Go to `Cobalt Strike` → `Script Manager`
-   - Click `Load` and select `portscanner.cna`
-   
-**Important**: The `.cna` script expects the `.o` files to be in the same directory as the script itself (using `script_resource()`)
+   - Click `Load` and select `prefetch.cna`
+
+**Important**: The `.cna` script expects the `.o` files to be in the same directory as the script itself.
 
 ## Usage
 
 In a Beacon console:
 
 ```
-portscanner <ip> <ports>
+prefetch [path] [filter1 filter2 ...]
 ```
 
 ### Examples
 
+**Parse all prefetch files (default location):**
 ```
-portscanner 192.168.1.1 80,443,8080
-portscanner 10.0.0.5 22,3389,445,139
-portscanner 172.16.0.100 21,22,23,25,80,443,3389,8080
+prefetch
+```
+
+**Parse prefetch files from a custom directory:**
+```
+prefetch C:\PrefetchBackup
+prefetch D:\Forensics\Prefetch
+```
+
+**Filter by specific executables:**
+```
+prefetch cmd.exe powershell.exe
+prefetch notepad.exe calc.exe chrome.exe
+prefetch mshta.exe wscript.exe cscript.exe
+```
+
+**Custom path with filters:**
+```
+prefetch C:\Custom\Path notepad.exe.pf calc.exe.pf
 ```
 
 ### Arguments
 
-- `ip` - Target IP address to scan
-- `ports` - Comma-separated list of ports to scan (no spaces)
+- `path` - (Optional) Custom prefetch directory path. Default: `C:\Windows\Prefetch`
+- `filters` - (Optional) One or more **executable names** to filter results (e.g., `cmd.exe`, `powershell.exe`)
 
-## Features
+**Note**: 
+- The path argument must contain a backslash (\\) or colon (:) to be recognized as a path
+- Filters match against the **executable name** (e.g., `cmd.exe`), not the full prefetch filename (e.g., `CMD.EXE-0BD30981.pf`)
+- Filter matching is case-insensitive
 
-- Lightweight in-memory execution
-- No files written to disk
-- Uses Beacon's process memory
-- Supports both x64 and x86 architectures
-- Timeout-based scanning (1 second per port)
-- HTTP probe on successful connections
+## Output Format
 
-## Output
+The BOF outputs detailed information for each prefetch file:
 
-The scanner will report each port as either:
-- `[+] ip:port is open` - Port is accessible
-- `[-] ip:port is closed` - Port is not accessible or filtered
+```
+========== Prefetch Analysis ==========
+Total Entries: 245
 
-## Differences from Original
+[1] CMD.EXE
+  Prefetch File: CMD.EXE-0BD30981.pf
+  Hash: 0BD30981
+  Run Count: 127
+  Version: 30
+  Created: 2024-01-15 09:23:45
+  Modified: 2024-01-20 14:32:10
+  Last Run Times:
+    [1] 2024-01-20 14:32:08
+    [2] 2024-01-20 12:15:33
+    [3] 2024-01-19 16:47:22
+    ...
 
-The BOF version has several key differences from the standalone executable:
+[2] POWERSHELL.EXE
+  ...
+```
 
-1. **No main() function** - Uses `go()` as the entry point
-2. **Dynamic function resolution** - Uses Beacon's API to call Windows functions via DECLSPEC_IMPORT
-3. **Beacon output** - Uses `BeaconPrintf()` instead of `printf()`
-4. **Argument parsing** - Uses Beacon's data parser instead of `argv`
-5. **Socket per port** - Creates a new socket for each port to avoid connection issues
+## Differences from Original Tool
+
+The BOF version differs from the standalone executable in several ways:
+
+1. **Output format**: Outputs to Beacon console instead of JSON file
+2. **No main() function**: Uses `go()` as the entry point
+3. **Dynamic function resolution**: Uses DECLSPEC_IMPORT for all Windows APIs
+4. **Simplified parsing**: Extracts key forensic data without full file path resolution
+5. **In-memory execution**: Runs entirely in Beacon's process space
+
+## Requirements
+
+- **Administrator privileges**: Required to access `C:\Windows\Prefetch`
+- **Windows 10 or 11**: Supports prefetch versions 30 and 31
+- **Architecture**: Both x64 and x86 beacons supported
 
 ## Limitations
 
-- No parallel scanning (scans ports sequentially)
-- Fixed 1-second timeout per port
+- Does not extract full file paths (only basic metadata)
+- Does not resolve volume device paths to drive letters
+- Maximum 64 filename filters
+- Sequential processing (not parallelized)
 
-## Improvements to Consider
+## Use Cases
 
-1. Implement parallel port scanning
-2. Add configurable timeout
-3. Add protocol detection beyond HTTP
-4. Support for port ranges (e.g., 80-100)
+- **Incident Response**: Identify executed malware and suspicious programs
+- **Forensic Analysis**: Determine program execution history and timeline
+- **Threat Hunting**: Find evidence of lateral movement tools (PSExec, WMI, etc.)
+- **Persistence Detection**: Identify startup programs and scheduled tasks
 
 ## Security Note
 
-This tool is intended for authorized security testing and red team operations only. Unauthorized port scanning may be illegal in your jurisdiction.
+This tool is intended for authorized security testing, incident response, and forensic analysis only. Unauthorized use may be illegal in your jurisdiction.
+
+## Technical Details
+
+### Supported Prefetch Versions
+
+- **Version 30**: Windows 10 (all builds)
+- **Version 31**: Windows 11
+
+### Compression
+
+The BOF automatically handles:
+- Compressed prefetch files (XPRESS_HUFF algorithm)
+- Uncompressed prefetch files
+- MAM (Memory And Module) header detection
+
+### Memory Management
+
+All memory allocations use Beacon's heap and are properly freed after parsing to avoid memory leaks in the target process.
+
+## Troubleshooting
+
+**"FindFirstFileW failed"**
+- Verify the prefetch path exists
+- Ensure you have administrator privileges
+- Check if prefetch is enabled (`HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters`)
+
+**"Invalid prefetch signature"**
+- File may be corrupted
+- Not a valid prefetch file
+- Check file format and version
+
+**"Unsupported prefetch version"**
+- BOF only supports Windows 10/11 (versions 30 and 31)
+- Earlier Windows versions (XP, Vista, 7, 8.1) are not supported

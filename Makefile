@@ -9,15 +9,15 @@ CFLAGS_x86 := $(CFLAGS) -m32
 
 all: x64 x86
 
-x64: portscanner.x64.o
+x64: prefetch.x64.o
 
-x86: portscanner.x86.o
+x86: prefetch.x86.o
 
-portscanner.x64.o: portscanner_bof.c beacon.h
-	$(CC_x64) $(CFLAGS_x64) portscanner_bof.c -o portscanner.x64.o
+prefetch.x64.o: prefetch_bof.c
+	$(CC_x64) $(CFLAGS_x64) prefetch_bof.c -o prefetch.x64.o
 
-portscanner.x86.o: portscanner_bof.c beacon.h
-	$(CC_x86) $(CFLAGS_x86) portscanner_bof.c -o portscanner.x86.o
+prefetch.x86.o: prefetch_bof.c
+	$(CC_x86) $(CFLAGS_x86) prefetch_bof.c -o prefetch.x86.o
 
 clean:
 	rm -f *.o
